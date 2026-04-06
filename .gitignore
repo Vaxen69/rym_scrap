@@ -1,0 +1,16 @@
+# Runtime data
+rym_scraper/browser_profile/
+rym_scraper/covers/
+rym_scraper/cache/
+rym_scraper/rym.db
+rym_scraper/rym.db-shm
+rym_scraper/rym.db-wal
+rym_scraper/progress.json
+rym_scraper/scraper.log
+
+# Env
+.env
+
+# Python
+__pycache__/
+*.pyc

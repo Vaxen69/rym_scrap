@@ -26,8 +26,8 @@ DB_FILE = PROJECT_DIR / "rym.db"
 LOG_FILE = PROJECT_DIR / "scraper.log"
 
 # === Délais (secondes) ===
-MIN_DELAY = 5
-MAX_DELAY = 12
+MIN_DELAY = 8
+MAX_DELAY = 18
 RETRY_MIN_DELAY = 60
 RETRY_MAX_DELAY = 120
 MAX_RETRIES = 3
@@ -38,5 +38,8 @@ CAPTCHA_INDICATORS = [
     "captcha",
     "verify you are human",
     "access denied",
+    "security check",
     "please complete the security check",
+    "automated scripts",
+    "confirm you are human",
 ]

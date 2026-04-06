@@ -133,15 +133,21 @@ class BrowserManager:
     # ------------------------------------------------------------------
 
     def fetch_page(self, url: str) -> str | None:
-        """Navigue vers l'URL et retourne le HTML. None si CAPTCHA."""
+        """Navigue vers l'URL et retourne le HTML. None si CAPTCHA non résolu."""
         driver = self._driver
         driver.get(url)
         self._wait_for_cloudflare()
         self._dismiss_popups()
 
         if self._is_captcha():
-            logger.critical("CAPTCHA détecté sur %s", url)
-            return None
+            # Attendre que l'utilisateur résolve le CAPTCHA manuellement
+            if not self._wait_for_captcha_resolution():
+                logger.critical("CAPTCHA non résolu sur %s — arrêt", url)
+                return None
+            # Après résolution, recharger la page originale
+            driver.get(url)
+            self._wait_for_cloudflare()
+            self._dismiss_popups()
 
         return driver.page_source
 
@@ -242,6 +248,26 @@ class BrowserManager:
             waited += 2
 
         logger.critical("Timeout Cloudflare après %ds", timeout)
+
+    # ------------------------------------------------------------------
+    # CAPTCHA RYM (attente résolution manuelle)
+    # ------------------------------------------------------------------
+
+    def _wait_for_captcha_resolution(self, timeout: int = 300) -> bool:
+        """
+        Attend que l'utilisateur résolve le CAPTCHA RYM manuellement.
+        Vérifie toutes les 3 secondes pendant max 5 minutes.
+        Retourne True si résolu, False si timeout.
+        """
+        logger.warning("CAPTCHA RYM détecté — résous-le dans la fenêtre du navigateur (5 min max)")
+        waited = 0
+        while waited < timeout:
+            time.sleep(3)
+            waited += 3
+            if not self._is_captcha():
+                logger.info("CAPTCHA résolu, reprise du scraping")
+                return True
+        return False
 
     # ------------------------------------------------------------------
     # Détection CAPTCHA RYM

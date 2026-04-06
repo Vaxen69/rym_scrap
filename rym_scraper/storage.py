@@ -279,6 +279,8 @@ class Storage:
         if filepath.exists():
             return
         try:
+            if cover_url.startswith("//"):
+                cover_url = "https:" + cover_url
             urllib.request.urlretrieve(cover_url, str(filepath))
             logger.debug("Cover téléchargée : %s", filename)
         except Exception as e:
