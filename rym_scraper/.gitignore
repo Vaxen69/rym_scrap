@@ -1,0 +1,8 @@
+.env
+cache/
+cookies.json
+progress.json
+rym.db
+scraper.log
+__pycache__/
+*.pyc
