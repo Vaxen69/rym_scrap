@@ -33,10 +33,34 @@ def setup_logging():
 logger = logging.getLogger(__name__)
 
 
+def _save_page_items(items: list, position_offset: int, chart_type: str,
+                     chart_year: int | None, storage: Storage, processed: set):
+    """Insère les items d'une page en DB immédiatement."""
+    for item in items:
+        item["position"] += position_offset
+        link = item["href"]
+        url = BASE_URL + link if link.startswith("/") else link
+        item["url"] = url
+        item["chart_position"] = item["position"]
+        item["chart_type"] = chart_type
+        item["chart_year"] = chart_year
+
+        if url in processed:
+            storage.add_chart_entry_by_url(url, chart_type, chart_year, item["position"])
+            continue
+
+        if item.get("title"):
+            storage.upsert_release(item)
+            mark_done(url, processed)
+        else:
+            logger.warning("Item incomplet, skip : %s", url)
+
+
 def scrape_chart(chart_url: str, chart_type: str, chart_year: int | None,
                  scraper: Scraper, storage: Storage, processed: set) -> bool:
     """
-    Scrape un chart complet (toutes les pages de pagination + chaque release).
+    Scrape un chart complet (toutes les pages de pagination).
+    Insertion en DB au fur et à mesure de chaque page (résilient au crash).
     chart_type: "year" ou "alltime"
     Retourne False si CAPTCHA détecté.
     """
@@ -49,19 +73,22 @@ def scrape_chart(chart_url: str, chart_type: str, chart_year: int | None,
         logger.critical("CAPTCHA ou erreur sur le chart %s — arrêt", label)
         return False
 
-    chart_items = extract_chart_items(chart_html)
+    page1_items = extract_chart_items(chart_html)
+    total_count = len(page1_items)
+    _save_page_items(page1_items, 0, chart_type, chart_year, storage, processed)
     mark_done(chart_url, processed)
+    logger.info("Chart %s : page 1 enregistrée (%d items)", label, len(page1_items))
 
-    # Pagination — extrait le chemin du chart depuis l'URL complète
+    # Pagination
     chart_path = chart_url.replace(BASE_URL, "")
     next_pages = extract_chart_pages(chart_html, chart_path)
 
     if next_pages:
-        # Méthode normale : on connaît le nombre total de pages
         logger.info("Chart %s : %d pages détectées", label, len(next_pages) + 1)
-        for page_href in next_pages:
+        for idx, page_href in enumerate(next_pages, 2):
             page_url = BASE_URL + page_href if page_href.startswith("/") else page_href
             if page_url in processed:
+                # On compte quand même les items pour l'offset
                 continue
 
             page_html = scraper.fetch(page_url)
@@ -69,15 +96,15 @@ def scrape_chart(chart_url: str, chart_type: str, chart_year: int | None,
                 logger.critical("CAPTCHA sur pagination %s — arrêt", page_url)
                 return False
 
-            page_offset = len(chart_items)
             new_items = extract_chart_items(page_html)
-            for item in new_items:
-                item["position"] += page_offset
-            chart_items.extend(new_items)
+            _save_page_items(new_items, total_count, chart_type, chart_year, storage, processed)
+            total_count += len(new_items)
             mark_done(page_url, processed)
+            logger.info("Chart %s : page %d/%d enregistrée (%d items, total %d)",
+                        label, idx, len(next_pages) + 1, len(new_items), total_count)
     else:
-        # Fallback : suit le bouton Next page par page
-        logger.info("Chart %s : pagination en suivant le bouton Next", label)
+        # Fallback : suit le bouton Next
+        logger.info("Chart %s : pagination via Next", label)
         current_html = chart_html
         page_count = 1
         while True:
@@ -93,39 +120,15 @@ def scrape_chart(chart_url: str, chart_type: str, chart_year: int | None,
                 logger.critical("CAPTCHA sur pagination %s — arrêt", page_url)
                 return False
 
-            page_offset = len(chart_items)
             new_items = extract_chart_items(current_html)
-            for item in new_items:
-                item["position"] += page_offset
-            chart_items.extend(new_items)
+            _save_page_items(new_items, total_count, chart_type, chart_year, storage, processed)
+            total_count += len(new_items)
             mark_done(page_url, processed)
             page_count += 1
-        logger.info("Chart %s : %d pages parcourues via Next", label, page_count)
+            logger.info("Chart %s : page %d enregistrée via Next (total %d)",
+                        label, page_count, total_count)
 
-    logger.info("Chart %s : %d releases à enregistrer", label, len(chart_items))
-
-    # Mode chart-only : toutes les données sont déjà extraites du chart,
-    # pas besoin de visiter chaque page album individuellement.
-    for item in chart_items:
-        link = item["href"]
-        url = BASE_URL + link if link.startswith("/") else link
-        item["url"] = url
-        item["chart_position"] = item["position"]
-        item["chart_type"] = chart_type
-        item["chart_year"] = chart_year
-
-        if url in processed:
-            # Déjà scrapé : on ajoute juste l'entrée chart pour ce nouveau classement
-            storage.add_chart_entry_by_url(url, chart_type, chart_year, item["position"])
-            continue
-
-        if item.get("title"):
-            storage.upsert_release(item)
-            mark_done(url, processed)
-        else:
-            logger.warning("Item incomplet, skip : %s", url)
-
-    logger.info("Chart %s terminé", label)
+    logger.info("Chart %s terminé : %d items au total", label, total_count)
     return True
 
 
