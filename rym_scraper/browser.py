@@ -131,6 +131,8 @@ class BrowserManager:
     def set_items_per_page(self, value: int = 100) -> bool:
         """
         Configure la préférence 'items per page' à 100 (max).
+        Clique d'abord sur l'icône engrenage pour ouvrir le panneau settings,
+        puis sélectionne la valeur dans le dropdown.
         Persiste server-side pour toute la session.
         """
         driver = self._driver
@@ -141,14 +143,31 @@ class BrowserManager:
             self._wait_for_cloudflare()
             self._dismiss_popups()
 
-            # Attendre que le select apparaisse
-            from selenium.webdriver.support.ui import Select
+            # Cliquer sur l'icône engrenage pour ouvrir le panneau settings
             try:
                 WebDriverWait(driver, 15).until(
-                    EC.presence_of_element_located((By.ID, "page_charts_settings_items_per_page"))
+                    EC.presence_of_element_located((By.CSS_SELECTOR, "i.fa-cog"))
+                )
+                cog = driver.find_element(By.CSS_SELECTOR, "i.fa-cog")
+                # Cliquer le parent (le bouton englobant) si possible
+                try:
+                    parent = cog.find_element(By.XPATH, "./..")
+                    parent.click()
+                except Exception:
+                    cog.click()
+                time.sleep(1)
+            except Exception as e:
+                logger.warning("Icône engrenage introuvable : %s", e)
+                return False
+
+            # Attendre que le select apparaisse après clic
+            from selenium.webdriver.support.ui import Select
+            try:
+                WebDriverWait(driver, 10).until(
+                    EC.visibility_of_element_located((By.ID, "page_charts_settings_items_per_page"))
                 )
             except Exception:
-                logger.warning("Select items_per_page introuvable — réglage ignoré")
+                logger.warning("Select items_per_page introuvable après clic engrenage")
                 return False
 
             sel_el = driver.find_element(By.ID, "page_charts_settings_items_per_page")
