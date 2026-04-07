@@ -210,9 +210,24 @@ def extract_chart_pages(html: str, base_chart_url: str = "") -> list[str]:
             except ValueError:
                 pass
 
-    if max_page <= 1:
-        return []
+    if max_page > 1:
+        base = base_chart_url.rstrip("/")
+        return [f"{base}/{i}/" for i in range(2, max_page + 1)]
 
-    # Génère toutes les pages 2..N à partir de l'URL de base
-    base = base_chart_url.rstrip("/")
-    return [f"{base}/{i}/" for i in range(2, max_page + 1)]
+    return []
+
+
+def extract_next_page(html: str) -> str | None:
+    """
+    Fallback : extrait le href du bouton 'Next' s'il existe.
+    Utilisé si extract_chart_pages() ne trouve pas de pagination explicite.
+    """
+    soup = BeautifulSoup(html, "html.parser")
+    next_label = soup.select_one("span.ui_pagination_next_label")
+    if next_label:
+        link = next_label.find_parent("a")
+        if link:
+            href = link.get("href", "")
+            if href:
+                return href
+    return None

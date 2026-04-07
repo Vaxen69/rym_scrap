@@ -5,7 +5,7 @@ import sys
 from config import BASE_URL, YEAR_START, YEAR_END, LOG_FILE
 from browser import BrowserManager
 from scraper import Scraper
-from parser import parse_release, extract_chart_items, extract_chart_pages
+from parser import parse_release, extract_chart_items, extract_chart_pages, extract_next_page
 from storage import Storage
 from checkpoint import load_progress, mark_done
 
@@ -55,23 +55,52 @@ def scrape_chart(chart_url: str, chart_type: str, chart_year: int | None,
     # Pagination — extrait le chemin du chart depuis l'URL complète
     chart_path = chart_url.replace(BASE_URL, "")
     next_pages = extract_chart_pages(chart_html, chart_path)
-    logger.info("Chart %s : %d pages détectées", label, len(next_pages) + 1)
-    for page_href in next_pages:
-        page_url = BASE_URL + page_href if page_href.startswith("/") else page_href
-        if page_url in processed:
-            continue
 
-        page_html = scraper.fetch(page_url)
-        if page_html is None:
-            logger.critical("CAPTCHA sur pagination %s — arrêt", page_url)
-            return False
+    if next_pages:
+        # Méthode normale : on connaît le nombre total de pages
+        logger.info("Chart %s : %d pages détectées", label, len(next_pages) + 1)
+        for page_href in next_pages:
+            page_url = BASE_URL + page_href if page_href.startswith("/") else page_href
+            if page_url in processed:
+                continue
 
-        page_offset = len(chart_items)
-        new_items = extract_chart_items(page_html)
-        for item in new_items:
-            item["position"] += page_offset
-        chart_items.extend(new_items)
-        mark_done(page_url, processed)
+            page_html = scraper.fetch(page_url)
+            if page_html is None:
+                logger.critical("CAPTCHA sur pagination %s — arrêt", page_url)
+                return False
+
+            page_offset = len(chart_items)
+            new_items = extract_chart_items(page_html)
+            for item in new_items:
+                item["position"] += page_offset
+            chart_items.extend(new_items)
+            mark_done(page_url, processed)
+    else:
+        # Fallback : suit le bouton Next page par page
+        logger.info("Chart %s : pagination en suivant le bouton Next", label)
+        current_html = chart_html
+        page_count = 1
+        while True:
+            next_href = extract_next_page(current_html)
+            if not next_href:
+                break
+            page_url = BASE_URL + next_href if next_href.startswith("/") else next_href
+            if page_url in processed:
+                break
+
+            current_html = scraper.fetch(page_url)
+            if current_html is None:
+                logger.critical("CAPTCHA sur pagination %s — arrêt", page_url)
+                return False
+
+            page_offset = len(chart_items)
+            new_items = extract_chart_items(current_html)
+            for item in new_items:
+                item["position"] += page_offset
+            chart_items.extend(new_items)
+            mark_done(page_url, processed)
+            page_count += 1
+        logger.info("Chart %s : %d pages parcourues via Next", label, page_count)
 
     logger.info("Chart %s : %d releases à traiter", label, len(chart_items))
 
