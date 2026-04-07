@@ -170,12 +170,19 @@ def parse_artist(html: str, url: str) -> dict | None:
 def extract_chart_items(html: str) -> list[dict]:
     """
     Extrait les items d'une page de chart.
+    Scope strict aux items du chart principal (évite les liens de sidebar).
     Retourne une liste de dicts avec href et position (index-based).
     """
     soup = BeautifulSoup(html, "html.parser")
     items = []
-    for i, a in enumerate(soup.select("a.release"), 1):
-        href = a.get("href", "")
+    chart_items = soup.select("div.page_charts_section_charts_item")
+    for i, div in enumerate(chart_items, 1):
+        link = div.select_one("a.page_charts_section_charts_item_link")
+        if not link:
+            link = div.select_one("a.release")
+        if not link:
+            continue
+        href = link.get("href", "")
         if href and href.startswith("/release/"):
             items.append({"href": href, "position": i})
     return items

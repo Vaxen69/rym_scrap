@@ -123,19 +123,21 @@ def main():
 
         scraper = Scraper(browser_mgr)
 
-        # Phase 1 : charts par année (du plus récent au plus ancien)
-        logger.info("=== Phase 1 : Charts par année ===")
+        # Phase 1 : chart all-time (priorité — chart le plus important)
+        logger.info("=== Phase 1 : Chart all-time ===")
+        alltime_url = f"{BASE_URL}/charts/top/album/all-time/"
+        ok = scrape_chart(alltime_url, "alltime", None, scraper, storage, processed)
+        if not ok:
+            logger.warning("All-time interrompu — relancer plus tard")
+
+        # Phase 2 : charts par année (du plus récent au plus ancien)
+        logger.info("=== Phase 2 : Charts par année ===")
         for year in range(YEAR_END, YEAR_START - 1, -1):
             chart_url = f"{BASE_URL}/charts/top/album/{year}/"
             ok = scrape_chart(chart_url, "year", year, scraper, storage, processed)
             if not ok:
                 logger.warning("Scraping interrompu — relancer plus tard")
                 break
-
-        # Phase 2 : chart all-time
-        logger.info("=== Phase 2 : Chart all-time ===")
-        alltime_url = f"{BASE_URL}/charts/top/album/all-time/"
-        scrape_chart(alltime_url, "alltime", None, scraper, storage, processed)
 
         # Résumé
         stats = storage.get_stats()
