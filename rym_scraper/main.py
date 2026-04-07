@@ -52,8 +52,10 @@ def scrape_chart(chart_url: str, chart_type: str, chart_year: int | None,
     chart_items = extract_chart_items(chart_html)
     mark_done(chart_url, processed)
 
-    # Pagination
-    next_pages = extract_chart_pages(chart_html)
+    # Pagination — extrait le chemin du chart depuis l'URL complète
+    chart_path = chart_url.replace(BASE_URL, "")
+    next_pages = extract_chart_pages(chart_html, chart_path)
+    logger.info("Chart %s : %d pages détectées", label, len(next_pages) + 1)
     for page_href in next_pages:
         page_url = BASE_URL + page_href if page_href.startswith("/") else page_href
         if page_url in processed:

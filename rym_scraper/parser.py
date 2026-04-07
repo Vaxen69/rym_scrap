@@ -188,12 +188,31 @@ def extract_chart_items(html: str) -> list[dict]:
     return items
 
 
-def extract_chart_pages(html: str) -> list[str]:
-    """Extrait les liens de pagination depuis une page de charts."""
+def extract_chart_pages(html: str, base_chart_url: str = "") -> list[str]:
+    """
+    Extrait TOUTES les pages de pagination d'un chart.
+    RYM n'affiche que [2, ..., N, Next], donc on détermine N puis on génère 2..N.
+    base_chart_url ex: '/charts/top/album/2026/' → génère '/charts/top/album/2026/2/' etc.
+    """
     soup = BeautifulSoup(html, "html.parser")
-    pages = []
-    for a in soup.select("a.ui_pagination_btn"):
+
+    # Cherche le numéro de page le plus élevé dans tous les liens de pagination
+    max_page = 1
+    page_pattern = re.compile(r"/(\d+)/?$")
+    for a in soup.select("a.ui_pagination_btn, a[class*='pagination']"):
         href = a.get("href", "")
-        if href:
-            pages.append(href)
-    return list(dict.fromkeys(pages))
+        m = page_pattern.search(href)
+        if m:
+            try:
+                n = int(m.group(1))
+                if n > max_page:
+                    max_page = n
+            except ValueError:
+                pass
+
+    if max_page <= 1:
+        return []
+
+    # Génère toutes les pages 2..N à partir de l'URL de base
+    base = base_chart_url.rstrip("/")
+    return [f"{base}/{i}/" for i in range(2, max_page + 1)]
