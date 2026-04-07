@@ -268,11 +268,17 @@ def extract_chart_items(html: str) -> list[dict]:
         if rev_el:
             num_reviews = _parse_abbr_number(rev_el.get_text(strip=True))
 
-        # Cover image
+        # Cover image — RYM utilise lazy-loading : src contient un placeholder
+        # base64, la vraie URL est dans data-src
         cover_url = ""
         img = div.select_one(".page_charts_section_charts_item_image img")
         if img:
-            cover_url = img.get("src", "") or img.get("data-src", "")
+            data_src = img.get("data-src", "")
+            src = img.get("src", "")
+            if data_src:
+                cover_url = data_src
+            elif src and not src.startswith("data:"):
+                cover_url = src
 
         items.append({
             "href": href,
