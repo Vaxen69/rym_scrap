@@ -31,6 +31,7 @@ CREATE TABLE IF NOT EXISTS releases (
     label           TEXT,
     avg_rating      REAL,
     num_ratings     INTEGER,
+    num_reviews     INTEGER,
     cover_url       TEXT,
     url             TEXT    NOT NULL UNIQUE,
     scraped_at      TEXT    NOT NULL
@@ -182,18 +183,18 @@ class Storage:
 
             self.conn.execute("""
                 INSERT INTO releases (title, artist_id, year, release_type, label,
-                    avg_rating, num_ratings, cover_url, url, scraped_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    avg_rating, num_ratings, num_reviews, cover_url, url, scraped_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(url) DO UPDATE SET
                     title = excluded.title, artist_id = excluded.artist_id,
                     year = excluded.year, release_type = excluded.release_type,
                     label = excluded.label, avg_rating = excluded.avg_rating,
-                    num_ratings = excluded.num_ratings, cover_url = excluded.cover_url,
-                    scraped_at = excluded.scraped_at
+                    num_ratings = excluded.num_ratings, num_reviews = excluded.num_reviews,
+                    cover_url = excluded.cover_url, scraped_at = excluded.scraped_at
             """, (
                 data["title"], artist_id, data.get("year"),
                 data.get("release_type"), data.get("label"),
-                data.get("avg_rating"), data.get("num_ratings"),
+                data.get("avg_rating"), data.get("num_ratings"), data.get("num_reviews"),
                 data.get("cover_url"), data["url"], now,
             ))
 

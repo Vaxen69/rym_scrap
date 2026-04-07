@@ -5,7 +5,7 @@ import sys
 from config import BASE_URL, YEAR_START, YEAR_END, LOG_FILE
 from browser import BrowserManager
 from scraper import Scraper
-from parser import parse_release, extract_chart_items, extract_chart_pages, extract_next_page
+from parser import extract_chart_items, extract_chart_pages, extract_next_page
 from storage import Storage
 from checkpoint import load_progress, mark_done
 
@@ -102,36 +102,28 @@ def scrape_chart(chart_url: str, chart_type: str, chart_year: int | None,
             page_count += 1
         logger.info("Chart %s : %d pages parcourues via Next", label, page_count)
 
-    logger.info("Chart %s : %d releases à traiter", label, len(chart_items))
+    logger.info("Chart %s : %d releases à enregistrer", label, len(chart_items))
 
-    # Scraper chaque release
-    for i, item in enumerate(chart_items, 1):
+    # Mode chart-only : toutes les données sont déjà extraites du chart,
+    # pas besoin de visiter chaque page album individuellement.
+    for item in chart_items:
         link = item["href"]
-        position = item["position"]
         url = BASE_URL + link if link.startswith("/") else link
+        item["url"] = url
+        item["chart_position"] = item["position"]
+        item["chart_type"] = chart_type
+        item["chart_year"] = chart_year
 
         if url in processed:
-            # L'album est déjà scrapé mais on doit quand même ajouter l'entrée chart
-            storage.add_chart_entry_by_url(url, chart_type, chart_year, position)
+            # Déjà scrapé : on ajoute juste l'entrée chart pour ce nouveau classement
+            storage.add_chart_entry_by_url(url, chart_type, chart_year, item["position"])
             continue
 
-        logger.info("[%s] [%d/%d] #%d %s", label, i, len(chart_items), position, url)
-        html = scraper.fetch(url)
-
-        if html is None:
-            logger.critical("CAPTCHA ou erreur fatale — arrêt")
-            return False
-
-        data = parse_release(html, url)
-        if data and data.get("title"):
-            data["chart_position"] = position
-            data["chart_type"] = chart_type
-            data["chart_year"] = chart_year
-            storage.upsert_release(data)
+        if item.get("title"):
+            storage.upsert_release(item)
+            mark_done(url, processed)
         else:
-            logger.warning("Parsing incomplet pour %s, skip", url)
-
-        mark_done(url, processed)
+            logger.warning("Item incomplet, skip : %s", url)
 
     logger.info("Chart %s terminé", label)
     return True

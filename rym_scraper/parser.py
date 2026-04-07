@@ -167,24 +167,129 @@ def parse_artist(html: str, url: str) -> dict | None:
         return None
 
 
+def _parse_abbr_number(text: str) -> int | None:
+    """Convertit '11k', '1.5k', '2m', '450' en int."""
+    if not text:
+        return None
+    text = text.strip().lower().replace(",", ".")
+    multiplier = 1
+    if text.endswith("k"):
+        multiplier = 1_000
+        text = text[:-1]
+    elif text.endswith("m"):
+        multiplier = 1_000_000
+        text = text[:-1]
+    try:
+        return int(float(text) * multiplier)
+    except ValueError:
+        return None
+
+
 def extract_chart_items(html: str) -> list[dict]:
     """
-    Extrait les items d'une page de chart.
-    Scope strict aux items du chart principal (évite les liens de sidebar).
-    Retourne une liste de dicts avec href et position (index-based).
+    Extrait TOUTES les données de chaque item depuis la page de chart.
+    Pas besoin de visiter chaque page album individuellement.
+    Retourne une liste de dicts avec toutes les infos.
     """
     soup = BeautifulSoup(html, "html.parser")
     items = []
     chart_items = soup.select("div.page_charts_section_charts_item")
+
     for i, div in enumerate(chart_items, 1):
-        link = div.select_one("a.page_charts_section_charts_item_link")
-        if not link:
-            link = div.select_one("a.release")
-        if not link:
+        # URL release
+        rel_link = div.select_one("a.page_charts_section_charts_item_link.release")
+        if not rel_link:
+            rel_link = div.select_one("a.release")
+        if not rel_link:
             continue
-        href = link.get("href", "")
-        if href and href.startswith("/release/"):
-            items.append({"href": href, "position": i})
+        href = rel_link.get("href", "")
+        if not href or not href.startswith("/release/"):
+            continue
+
+        # Titre
+        title_el = div.select_one("a.page_charts_section_charts_item_link.release .ui_name_locale_original")
+        if not title_el:
+            title_el = rel_link
+        title = title_el.get_text(strip=True) if title_el else None
+
+        # Artiste (nom + URL)
+        artist_link = div.select_one(".page_charts_section_charts_item_credited_links_primary a")
+        artist_name = None
+        artist_url = ""
+        if artist_link:
+            artist_url = artist_link.get("href", "")
+            name_el = artist_link.select_one(".ui_name_locale_original") or artist_link
+            artist_name = name_el.get_text(strip=True)
+
+        # Date → année
+        year = None
+        date_el = div.select_one(".page_charts_section_charts_item_date")
+        if date_el:
+            m = re.search(r"(\d{4})", date_el.get_text())
+            if m:
+                year = int(m.group(1))
+
+        # Type de release
+        release_type = None
+        type_el = div.select_one(".page_charts_section_charts_item_release_type")
+        if type_el:
+            release_type = type_el.get_text(strip=True)
+
+        # Genres primaires
+        pri_genres = ", ".join(
+            g.get_text(strip=True)
+            for g in div.select(".page_charts_section_charts_item_genres_primary .genre")
+        )
+
+        # Genres secondaires
+        sec_genres = ", ".join(
+            g.get_text(strip=True)
+            for g in div.select(".page_charts_section_charts_item_genres_secondary .genre")
+        )
+
+        # Note
+        avg_rating = None
+        rating_el = div.select_one(".page_charts_section_charts_item_details_average_num")
+        if rating_el:
+            try:
+                avg_rating = float(rating_el.get_text(strip=True))
+            except ValueError:
+                pass
+
+        # Nombre de votes (format abrégé "11k")
+        num_ratings = None
+        num_el = div.select_one(".page_charts_section_charts_item_details_ratings .abbr")
+        if num_el:
+            num_ratings = _parse_abbr_number(num_el.get_text(strip=True))
+
+        # Nombre de reviews
+        num_reviews = None
+        rev_el = div.select_one(".page_charts_section_charts_item_details_reviews .abbr")
+        if rev_el:
+            num_reviews = _parse_abbr_number(rev_el.get_text(strip=True))
+
+        # Cover image
+        cover_url = ""
+        img = div.select_one(".page_charts_section_charts_item_image img")
+        if img:
+            cover_url = img.get("src", "") or img.get("data-src", "")
+
+        items.append({
+            "href": href,
+            "position": i,
+            "title": title,
+            "artist_name": artist_name,
+            "artist_url": artist_url,
+            "year": year,
+            "release_type": release_type,
+            "pri_genres": pri_genres,
+            "sec_genres": sec_genres,
+            "avg_rating": avg_rating,
+            "num_ratings": num_ratings,
+            "num_reviews": num_reviews,
+            "cover_url": cover_url,
+        })
+
     return items
 
 
