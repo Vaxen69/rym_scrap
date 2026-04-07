@@ -271,30 +271,25 @@ class Storage:
 
     @staticmethod
     def _download_cover(cover_url: str, release_url: str):
-        """Télécharge la pochette dans covers/ si pas déjà présente.
-        Tente d'abord la version 600px, fallback sur l'URL d'origine."""
+        """Télécharge la pochette dans covers/ (300px depuis le chart, fiable)."""
         COVERS_DIR.mkdir(parents=True, exist_ok=True)
         filename = hashlib.sha256(release_url.encode()).hexdigest()[:16] + ".jpg"
         filepath = COVERS_DIR / filename
-        if filepath.exists():
+        if filepath.exists() and filepath.stat().st_size > 200:
             return
 
         if cover_url.startswith("//"):
             cover_url = "https:" + cover_url
 
-        # Upgrade 300px → 600px (RYM expose les 2 tailles avec le même hash)
-        hires_url = cover_url.replace("/i/300/", "/i/600/")
-
-        for url_to_try in (hires_url, cover_url):
-            try:
-                urllib.request.urlretrieve(url_to_try, str(filepath))
+        try:
+            urllib.request.urlretrieve(cover_url, str(filepath))
+            if filepath.stat().st_size > 200:
                 logger.debug("Cover téléchargée : %s", filename)
-                return
-            except Exception as e:
-                logger.debug("Échec %s : %s", url_to_try, e)
-                continue
-
-        logger.warning("Échec téléchargement cover : %s", cover_url)
+            else:
+                logger.warning("Placeholder reçu pour %s", cover_url)
+                filepath.unlink(missing_ok=True)
+        except Exception as e:
+            logger.warning("Échec téléchargement cover %s : %s", cover_url, e)
 
     # ------------------------------------------------------------------
     # Chart entries
