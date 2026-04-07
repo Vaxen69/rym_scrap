@@ -147,6 +147,9 @@ def main():
             logger.critical("Impossible de se connecter — arrêt")
             return
 
+        # Augmenter à 100 items par page pour réduire le nombre de requêtes
+        browser_mgr.set_items_per_page(100)
+
         scraper = Scraper(browser_mgr)
 
         # Phase 1 : chart all-time (priorité — chart le plus important)

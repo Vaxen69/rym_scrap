@@ -128,6 +128,43 @@ class BrowserManager:
         logger.info("Session expirée, tentative de login...")
         return self.login()
 
+    def set_items_per_page(self, value: int = 100) -> bool:
+        """
+        Configure la préférence 'items per page' à 100 (max).
+        Persiste server-side pour toute la session.
+        """
+        driver = self._driver
+        chart_url = f"{BASE_URL}/charts/top/album/all-time/"
+        logger.info("Configuration items_per_page=%d...", value)
+        try:
+            driver.get(chart_url)
+            self._wait_for_cloudflare()
+            self._dismiss_popups()
+
+            # Attendre que le select apparaisse
+            from selenium.webdriver.support.ui import Select
+            try:
+                WebDriverWait(driver, 15).until(
+                    EC.presence_of_element_located((By.ID, "page_charts_settings_items_per_page"))
+                )
+            except Exception:
+                logger.warning("Select items_per_page introuvable — réglage ignoré")
+                return False
+
+            sel_el = driver.find_element(By.ID, "page_charts_settings_items_per_page")
+            Select(sel_el).select_by_value(str(value))
+            # Déclencher le change event au cas où
+            driver.execute_script(
+                "arguments[0].dispatchEvent(new Event('change', {bubbles: true}));",
+                sel_el,
+            )
+            time.sleep(3)  # Laisse RYM enregistrer la préférence
+            logger.info("items_per_page configuré à %d", value)
+            return True
+        except Exception as e:
+            logger.warning("Échec configuration items_per_page : %s", e)
+            return False
+
     # ------------------------------------------------------------------
     # Navigation
     # ------------------------------------------------------------------
